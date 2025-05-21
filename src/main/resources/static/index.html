@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8"/>
+  <title>SmartLeave Demo</title>
+  <!-- 載入 Vue 3 全域版 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div id="app" class="max-w-4xl mx-auto p-6">    
+    <!-- 登入畫面 -->
+    <div v-if="!user" class="bg-white shadow rounded-lg p-6">
+      <h2 class="text-2xl mb-4 font-semibold">請先登入</h2>
+      <input v-model="credentials.username" placeholder="帳號"
+             class="w-full mb-3 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400"/>
+      <input v-model="credentials.password" type="password" placeholder="密碼"
+             class="w-full mb-4 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400"/>
+      <button @click="login"
+              class="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 rounded">
+        登入
+      </button>
+      <p v-if="error" class="mt-2 text-red-500">{{ error }}</p>
+    </div>
+
+    <!-- 已登入畫面 -->
+    <div v-else>
+      <!-- 頂部導航 -->
+      <nav class="relative bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between">
+        <div class="text-lg font-medium">
+          歡迎，<span class="text-blue-600">{{ user.username }}</span>！
+        </div>
+        <button class="logout-btn bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded absolute top-4 right-4" @click="logout">
+          登出
+        </button>
+      </nav>
+
+      <!-- 員工元件 -->
+      <employee-dashboard
+        v-if="user.role==='EMPLOYEE'"
+        :emp-id="user.empId">
+      </employee-dashboard>
+
+      <!-- 主管元件 -->
+      <manager-dashboard
+        v-else-if="user.role==='MANAGER'"
+        :mgr-id="user.mgrId">
+      </manager-dashboard>
+
+      <div v-else class="text-center text-red-600">
+        未知角色，請聯絡系統管理員。
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 員工元件
+    const EmployeeDashboard = {
+      props: ['empId'],
+      template: `
+      <div class="bg-white shadow rounded-lg p-6">
+        <h3 class="text-xl font-semibold mb-4">員工請假系統</h3>
+
+        <!-- 標籤切換 -->
+        <div class="mb-4">
+          <button @click="mode='form'"
+                  :class="mode==='form' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                  class="px-4 py-2 rounded-l">
+            申請假單
+          </button>
+          <button @click="showList()"
+                  :class="mode==='list' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                  class="px-4 py-2 rounded-r">
+            查詢假單
+          </button>
+        </div>
+
+        <!-- 申請表單 -->
+        <div v-if="mode==='form'" class="space-y-3">
+          <input type="date" v-model="form.startDate"
+                 class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-300"/>
+          <input type="date" v-model="form.endDate"
+                 class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-300"/>
+          <input v-model="form.leaveType" placeholder="請假類型"
+                 class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-300"/>
+          <input v-model="form.reason" placeholder="原因"
+                 class="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-300"/>
+          <button @click="submit()"
+                  class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+            送出申請
+          </button>
+          <p v-if="msg" class="text-green-600">{{ msg }}</p>
+        </div>
+
+        <!-- 查詢列表 -->
+        <div v-if="mode==='list'">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">假單編號</th>
+                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">期間</th>
+                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">類型</th>
+                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">原因</th>
+                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">狀態</th>
+                <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">送出時間</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="l in leaves" :key="l.leaveId" class="hover:bg-gray-100">
+                <td class="px-4 py-2 text-sm">{{ l.leaveId }}</td>
+                <td class="px-4 py-2 text-sm">{{ l.startDate }} ~ {{ l.endDate }}</td>
+                <td class="px-4 py-2 text-sm">{{ l.type }}</td>
+                <td class="px-4 py-2 text-sm">{{ l.reason }}</td>
+                <td class="px-4 py-2 text-sm">{{ l.status }}</td>
+                <td class="px-4 py-2 text-sm">{{ new Date(l.createdTime).toLocaleString() }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      `,
+      data() {
+        return {
+          mode: 'list',
+          form: { startDate:'', endDate:'', leaveType:'', reason:'' },
+          leaves: [],
+          msg: ''
+        };
+      },
+      methods: {
+        showList() {
+          this.mode = 'list';
+          fetch(`/api/leaves/employee/${this.empId}`)
+            .then(r=>r.json()).then(data=>this.leaves=data);
+        },
+        submit() {
+          fetch('/api/leaves', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ empId:this.empId, ...this.form })
+          })
+          .then(r=>r.json())
+          .then(lr=>{
+            this.msg = '申請成功！可於查詢假單中確認假單狀態！';
+            this.form = { startDate:'', endDate:'', leaveType:'', reason:'' };
+          });
+        }
+      },
+      mounted() {
+        this.showList();
+      }
+    };
+
+    // 主管元件
+    const ManagerDashboard = {
+      props: ['mgrId'],
+      template: `
+      <div class="bg-white shadow rounded-lg p-6">
+        <h3 class="text-xl font-semibold mb-4">主管審核假單系統</h3>
+        <button @click="fetchPendings()" class="bg-gray-200 hover:bg-blue-600 hover:text-white text-gray-800 px-4 py-2 rounded mb-4">
+          更新待審列表
+        </button>
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">假單編號</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">申請者</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">期間</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">類型</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">原因</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">送出時間</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">操作</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr v-for="l in pendings" :key="l.leaveId" class="hover:bg-gray-100">
+              <td class="px-4 py-2 text-sm">{{ l.leaveId }}</td>
+              <td class="px-4 py-2 text-sm">{{ l.employee.user.username }}</td>
+              <td class="px-4 py-2 text-sm">{{ l.startDate }} ~ {{ l.endDate }}</td>
+              <td class="px-4 py-2 text-sm">{{ l.type }}</td>
+              <td class="px-4 py-2 text-sm">{{ l.reason }}</td>
+              <td class="px-4 py-2 text-sm">{{ new Date(l.createdTime).toLocaleString() }}</td>
+              <td class="px-4 py-2 text-sm justify-center">
+                <button @click="review(l.leaveId,true)" class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded">通過</button>
+
+                <button @click="review(l.leaveId,false)" class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded">駁回</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      `,
+      data() { return { pendings: [] }; },
+      methods: {
+        fetchPendings() {
+          fetch('/api/leaves/status/PENDING')
+            .then(r=>r.json()).then(data=>this.pendings=data);
+        },
+        review(id, approve) {
+          fetch(`/api/leaves/${id}/review?mgrId=${this.mgrId}&approve=${approve}`, { method:'PUT' })
+            .then(r=>r.json())
+            .then(_=> this.fetchPendings());
+        }
+      },
+      mounted() { this.fetchPendings(); }
+    };
+
+    // 主 App
+    Vue.createApp({
+      components: { EmployeeDashboard, ManagerDashboard },
+      data() {
+        return {
+          user: null,
+          error: '',
+          credentials: { username:'', password:'' }
+        };
+      },
+      methods: {
+        login() {
+          fetch('/api/auth/login', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(this.credentials)
+          })
+          .then(r=>{ if(!r.ok) throw new Error('帳密錯誤'); return r.json(); })
+          .then(data=>{ this.user=data; this.error=''; })
+          .catch(e=> this.error=e.message);
+        },
+        logout() {
+          this.user = null;
+          this.credentials.username = '';
+          this.credentials.password = '';
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
